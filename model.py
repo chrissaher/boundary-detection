@@ -54,6 +54,7 @@ class LossFn:
         chose_index = torch.nonzero(mask.data)
         chose_index = torch.squeeze(chose_index)
 
+        # print("TOTAL: ", total)
         valid_gt_offset = gt_offset[chose_index, :]
         valid_pred_offset = pred_offset[chose_index, :]
         # try:
@@ -401,6 +402,137 @@ class EncoderFichaNet(nn.Module):
     def forward(self, X):
         x = self.encoder(X)
         x = self.added_layers(x)
+        x = x.view(x.size(0), -1)
+        x = self.conv5(x)
+        x = self.dropout5(x)
+        x = self.prelu5(x)
+
+        det = torch.sigmoid(self.cls_layer(x))
+        reg = self.reg_layer(x)
+
+        return det, reg
+
+# Full enet trained, only encoder
+# Left and Right, same encoder, different final layers
+# Outputs 20 points (only Y axis)
+class EncoderPointsLeftRightFichaNet(nn.Module):
+
+    def __init__(self, is_train=False, nclasses=4, use_cuda=True):
+        super(EncoderPointsLeftRightFichaNet, self).__init__()
+        self.is_train = is_train
+        self.use_cuda = use_cuda
+
+        self.encoder = Encoder(ENCODER_PARAMS, nclasses)
+
+        self.added_layers = nn.Sequential(
+            # mtcnn
+            nn.Conv2d(128, 32, kernel_size=3, stride=1),  # conv1
+            nn.PReLU(),  # prelu1
+            nn.MaxPool2d(kernel_size=3, stride=2),  # pool1
+            nn.Conv2d(32, 64, kernel_size=3, stride=1),  # conv2
+            nn.PReLU(),  # prelu2
+            nn.MaxPool2d(kernel_size=3, stride=2),  # pool2
+            nn.Conv2d(64, 64, kernel_size=3, stride=1,padding=1),  # conv3
+            nn.PReLU(), # prelu3
+            nn.MaxPool2d(kernel_size=2,stride=2), # pool3
+            nn.Conv2d(64,128,kernel_size=2,stride=1), # conv4
+            nn.PReLU() # prelu4
+        )
+
+        # mtcnn
+        # LEFT
+        self.conv5 = nn.Linear(128*17, 256)  # conv5
+        # Custom
+        # self.conv5 = nn.Linear(32*190, 256)  # conv5
+        self.dropout5 = nn.Dropout(0.25)
+        self.prelu5 = nn.PReLU()  # prelu5
+
+        # detection
+        self.cls_layer = nn.Linear(256, 1)
+        # regression
+        self.reg_layer = nn.Linear(256, 20)
+
+        # RIGHT
+
+        self.conv6 = nn.Linear(128*17, 256)  # conv5
+        # Custom
+        # self.conv5 = nn.Linear(32*190, 256)  # conv5
+        self.dropout6 = nn.Dropout(0.25)
+        self.prelu6 = nn.PReLU()  # prelu5
+
+        # detection
+        self.cls_layer_2 = nn.Linear(256, 1)
+        # regression
+        self.reg_layer_2 = nn.Linear(256, 20)
+        # weight initiation weih xavier
+        # self.apply(weights_init)
+
+    def forward(self, X):
+        x = self.encoder(X)
+
+        x = self.added_layers(x)
+        l = x.view(x.size(0), -1)
+        l = self.conv5(l)
+        l = self.dropout5(l)
+        l = self.prelu5(l)
+
+        det_l = torch.sigmoid(self.cls_layer(l))
+        reg_l = self.reg_layer(l)
+
+        #r = self.added_layers(x)
+        r = x.view(x.size(0), -1)
+        r = self.conv6(r)
+        r = self.dropout6(r)
+        r = self.prelu6(r)
+
+        det_r = torch.sigmoid(self.cls_layer_2(r))
+        reg_r = self.reg_layer_2(r)
+
+        return det_l, det_r, reg_l, reg_r
+
+
+class EncoderPointsOneSideFichaNet(nn.Module):
+
+    def __init__(self, is_train=False, nclasses=4, use_cuda=True):
+        super(EncoderPointsOneSideFichaNet, self).__init__()
+        self.is_train = is_train
+        self.use_cuda = use_cuda
+
+        self.encoder = Encoder(ENCODER_PARAMS, nclasses)
+
+        self.added_layers = nn.Sequential(
+            # mtcnn
+            nn.Conv2d(128, 32, kernel_size=3, stride=1),  # conv1
+            nn.PReLU(),  # prelu1
+            nn.MaxPool2d(kernel_size=3, stride=2),  # pool1
+            nn.Conv2d(32, 64, kernel_size=3, stride=1),  # conv2
+            nn.PReLU(),  # prelu2
+            nn.MaxPool2d(kernel_size=3, stride=2),  # pool2
+            nn.Conv2d(64, 64, kernel_size=3, stride=1,padding=1),  # conv3
+            nn.PReLU(), # prelu3
+            nn.MaxPool2d(kernel_size=2,stride=2), # pool3
+            nn.Conv2d(64,128,kernel_size=2,stride=1), # conv4
+            nn.PReLU() # prelu4
+        )
+
+        # mtcnn
+        self.conv5 = nn.Linear(128*17, 256)  # conv5
+        # Custom
+        # self.conv5 = nn.Linear(32*190, 256)  # conv5
+        self.dropout5 = nn.Dropout(0.25)
+        self.prelu5 = nn.PReLU()  # prelu5
+
+        # detection
+        self.cls_layer = nn.Linear(256, 1)
+        # regression
+        self.reg_layer = nn.Linear(256, 20)
+        # weight initiation weih xavier
+        # self.apply(weights_init)
+
+    def forward(self, X):
+        x = self.encoder(X)
+        x = self.added_layers(x)
+
         x = x.view(x.size(0), -1)
         x = self.conv5(x)
         x = self.dropout5(x)

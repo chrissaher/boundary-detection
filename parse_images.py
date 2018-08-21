@@ -17,10 +17,10 @@ def get_training_data(image_path='images/', annotation_file='tag.csv', max_w = 1
         # First tag
         label1 = int(data[1])
         type1 = int(data[2])
-        x1 = int(data[3]) * 1.0 / max_w
-        y1 = int(data[4]) * 1.0 / max_h
-        x2 = int(data[5]) * 1.0 / max_w
-        y2 = int(data[6]) * 1.0 / max_h
+        x1 = int(data[3]) * 1.0
+        y1 = int(data[4]) * 1.0
+        x2 = int(data[5]) * 1.0
+        y2 = int(data[6]) * 1.0
 
         m1 = (y2 - y1) * 1.0 / (x2 - x1)
         b1 = y1 - m1 * x1
@@ -32,10 +32,10 @@ def get_training_data(image_path='images/', annotation_file='tag.csv', max_w = 1
         if len(data) > 7:
             label2 = int(data[7])
             type2 = int(data[8])
-            x1 = int(data[9]) * 1.0 / max_w
-            y1 = int(data[10]) * 1.0 / max_h
-            x2 = int(data[11]) * 1.0 / max_w
-            y2 = int(data[12]) * 1.0 / max_h
+            x1 = int(data[9]) * 1.0
+            y1 = int(data[10]) * 1.0
+            x2 = int(data[11]) * 1.0
+            y2 = int(data[12]) * 1.0
 
             m2 = (y2 - y1) * 1.0 / (x2 - x1)
             b2 = y1 - m2 * x1
@@ -57,6 +57,61 @@ def get_training_data(image_path='images/', annotation_file='tag.csv', max_w = 1
 
 
     return images, labels, boxes_l, boxes_r
+
+def get_training_data_right_from_full(image_path='images/', annotation_file='tag.csv', max_w = 1280, max_h = 240):
+    images = []
+    labels = []
+    boxes_r = []
+    content = []
+
+    with open(annotation_file, 'r') as f:
+        content = f.read().splitlines()
+
+    for line in content:
+        data = line.split(',')
+
+
+        # First tag
+        label1 = int(data[1])
+        type1 = int(data[2])
+        x1 = int(data[3]) * 1.0
+        y1 = int(data[4]) * 1.0
+        x2 = int(data[5]) * 1.0
+        y2 = int(data[6]) * 1.0
+
+        m1 = (y2 - y1) * 1.0 / (x2 - x1)
+        b1 = y1 - m1 * x1
+
+        label2 = 0
+        type2 = 1 - type1
+        m2 = 0
+        b2 = 0
+        if len(data) > 7:
+            label2 = int(data[7])
+            type2 = int(data[8])
+            x1 = int(data[9]) * 1.0
+            y1 = int(data[10]) * 1.0
+            x2 = int(data[11]) * 1.0
+            y2 = int(data[12]) * 1.0
+
+            m2 = (y2 - y1) * 1.0 / (x2 - x1)
+            b2 = y1 - m2 * x1
+
+
+        if type1 == 1 and type2 == 0:
+            images.append(os.path.join(image_path, data[0]))
+            labels.append(label2)
+            boxes_r.append([m2,b2])
+        elif type1 == 0 and type2 == 1:
+            images.append(os.path.join(image_path, data[0]))
+            labels.append(label1)
+            boxes_r.append([m1,b1])
+        else:
+            print("### Error in types for image: ", data[0], " type1: ", type1, " type2: ", type2)
+            continue
+
+
+    return images, labels, boxes_r
 
 def get_training_data_mtcnn(image_path='images_mtcnn/', annotation_file='tag.mtcnn.csv', max_w = 1280, max_h = 240):
     images = []

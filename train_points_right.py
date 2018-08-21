@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import math
 from model import *
-from parse_images import get_training_data_left
+from parse_images import get_training_data_right_from_full
 
 import torch
 from tqdm import tqdm
@@ -15,71 +15,72 @@ from enet import ENet
 from PIL import Image
 import torchvision.transforms as standard_transforms
 
-def get_next_batch(gt_images, gt_labels, gt_boxes, iter, batch_size, shuffle=True, transform=None):
+import os
+
+def get_next_batch(gt_images, gt_labels, gt_boxes_r, iter, batch_size, shuffle=True, transform=None):
 
     start_point = iter * batch_size
     end_point = (iter + 1) * batch_size
     images = []
-    boxes = []
-    for gt_image, gt_box in zip(gt_images[start_point:end_point], gt_boxes[start_point:end_point]):
+    boxes_r = []
+
+    X = np.arange(20)
+    for gt_image, gt_box_r in zip(gt_images[start_point:end_point], gt_boxes_r[start_point:end_point]):
+        box_l = []
+        box_r = []
         img = cv2.imread(gt_image)
         pad_size = np.random.randint(51)
         pad_dir = np.random.randint(2) * 2 - 1
-
-        # print("DIR: ", pad_dir)
-        # print('IMG SHAPE: ', img.shape)
-        if pad_dir == -1:
-            img = img[50 - pad_size: 290 - pad_size, : ,:]
-        else:
-            img = img[50 + pad_size: 290 + pad_size, : ,:]
+        pad_size = 0
         img = np.array(img)
-        # print('IMG SHAPE 2: ', img.shape)
-        # img = Image.open(gt_image).convert('RGB')
-        img = cv2.resize(img, (1120, 210)) # To keep aspect ratio
         images.append(img.transpose(2,0,1))
 
-        m, b = gt_box
+        mr, br = gt_box_r
         if pad_dir == -1:
-            boxes.append([m, b + pad_size / 240.])
+            for elem in X:
+                y = 240 - elem * 5
+                x =  (y - br - pad_size) / mr
+                box_r.append(x)
+
         else:
-            boxes.append([m, b - pad_size / 240.])
+            for elem in X:
+                y = 240 - elem * 5
+                x =  (y - br + pad_size) / mr
+                box_r.append(x)
+
+        boxes_r.append(box_r)
 
     labels = gt_labels[start_point:end_point]
-    # boxes = gt_boxes[start_point:end_point]
 
     images = np.array(images)
     labels = np.array(labels)
-    boxes = np.array(boxes)
+    boxes_r = np.array(boxes_r)
+
 
     if shuffle == True:
         p = np.random.permutation(len(images))
         images = images[p]
         labels = labels[p]
-        boxes = boxes[p]
+        boxes_r = boxes_r[p]
 
-    return images, labels, boxes
+    return images, labels, boxes_r
 
 def test_get_data():
-    gt_images, gt_labels, gt_boxes = get_training_data_left(image_path = 'images_left_padded/', max_w = 1280, max_h = 240)
-    images, labels, boxes = get_next_batch(gt_images, gt_labels, gt_boxes, 0, 10)
-    for image, label, box in zip(images, labels, boxes):
-        m,b = box
-        print("M: ", m)
-        print("b: ", b)
+    X = np.arange(20)
+    color_green = (0,255,0) # green - 128
+    color_blue = (255,0, 0) # green - 128
+    gt_images, gt_labels, gt_boxes_r = get_training_data_right_from_full(image_path = 'images_complete/', annotation_file='tag.complete.csv', max_w = 1280, max_h = 240)
+    images, labels, boxes_r = get_next_batch(gt_images, gt_labels, gt_boxes_r, 250, 5)
+    for image, label, box_r in zip(images, labels, boxes_r):
         frame = image.transpose((1,2,0)).astype(np.uint8).copy()
-        print(image.shape)
-        x1 = 0
-        print("PRE_X1: ", m * 0 + b)
-        print("PRE_X2: ", m * 0.45 + b)
-        y1 = int((m * x1 + b) * 240)
-        x2 = 0.45
-        y2 = int((m * x2 + b) * 240)
-        x2 = int(x2 * 1280)
-        print("X1: ", x1)
-        print("Y1: ", y1)
-        print("X2: ", x2)
-        print("Y2: ", y2)
-        cv2.line(img=frame, pt1=(x1,y1), pt2=(x2,y2), color=(0,255,0), thickness=2)
+
+        if label == 1:
+            xs = box_r
+            for idx, elem in enumerate(X):
+                y = 240 - elem * 5
+                x = int(xs[idx])
+                cv2.circle(img=frame, center=(x,y), radius=5, color=color_blue, thickness=2)
+
         cv2.imshow('image', frame)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
@@ -91,7 +92,7 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
     print('Learning rate: ', lr)
     lossfn = LossFn()
     # net = Network(is_train=True, use_cuda=use_cuda)
-    net = EncoderFichaNet(is_train=True, use_cuda=use_cuda)
+    net = EncoderPointsOneSideFichaNet(is_train=True, use_cuda=use_cuda)
     print('Summary')
 
     # summary(net, (3, 640, 120))
@@ -103,7 +104,7 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
     net.encoder = pretrained_model.encoder
 
     freeze_layers = [
-        net.encoder
+        # net.encoder
     ]
 
     # freeze_layers.extend(net.layers)
@@ -123,7 +124,7 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
     #     standard_transforms.ToTensor()
     # ])
 
-    gt_images, gt_labels, gt_boxes = get_training_data_left(image_path = 'images_left_padded/', max_w = 1280, max_h = 240)
+    gt_images, gt_labels, gt_boxes_r = get_training_data_right_from_full(image_path = 'images_complete/', annotation_file='tag.complete.csv', max_w = 1280, max_h = 240)
     train_size = len(gt_images)
     n_iterations = train_size // batch_size
     if n_iterations * batch_size < train_size:
@@ -143,25 +144,28 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
         avg_box_loss = 0
 
         for iter in tqdm(range(n_iterations)):
-            images, labels, boxes = get_next_batch(gt_images, gt_labels, gt_boxes, iter, batch_size)
+            images, labels, boxes_r = get_next_batch(gt_images, gt_labels, gt_boxes_r, iter, batch_size)
             total = np.sum(labels)
 
+            # print("TOTAL: ", total)
             im_tensor = Variable(torch.from_numpy(images).float())
             gt_label = Variable(torch.from_numpy(labels).float())
-            gt_box = Variable(torch.from_numpy(boxes).float())
+            # gt_box_l = Variable(torch.from_numpy(boxes_l).float())
+            gt_box_r = Variable(torch.from_numpy(boxes_r).float())
 
             if use_cuda:
                 im_tensor = im_tensor.cuda()
                 gt_label = gt_label.cuda()
-                gt_box = gt_box.cuda()
+                # gt_box_l = gt_box_l.cuda()
+                gt_box_r = gt_box_r.cuda()
 
             cls_pred, box_pred = net(im_tensor)
 
             cls_loss = lossfn.cls_loss(gt_label, cls_pred)
-            box_loss = lossfn.reg_loss(gt_label, gt_box, box_pred)
+            box_loss = lossfn.reg_loss(gt_label, gt_box_r, box_pred, total)
 
             cls_weight = 1
-            reg_weight = 2
+            reg_weight = 1
 
             if total == 0:
                 all_loss = (cls_loss) * cls_weight
@@ -185,12 +189,18 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
         avg_box_loss = avg_box_loss * 1.0 / n_iterations
         print("Epoch: %d, tot_loss: %.5f, cls_loss: %.5f, box_loss: %.5f" % (epoch, avg_tot_loss, avg_cls_loss, avg_box_loss))
 
-        if epoch % 50 == 0:
+        if epoch % 10 == 0:
             print("SAVING MODEL")
-            torch.save(net, './models/1120x210_enet_mtcnn_pad/model_epoch_{}.ckpt'.format(epoch))
+            torch.save(net, './models/1280x240_points_right/model_epoch_{}.ckpt'.format(epoch))
             print("MODEL SAVED CORRECTLY")
     print("FINISH")
 
 if __name__ == '__main__':
-    train()
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+    print("#devices: ", torch.cuda.device_count())
+    with torch.cuda.device(0):
+        print('current device: ', torch.cuda.current_device())
+        train()
+        # test_get_data()
+    # train()
     # test_get_data()

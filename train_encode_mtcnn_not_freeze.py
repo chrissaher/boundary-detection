@@ -15,6 +15,11 @@ from enet import ENet
 from PIL import Image
 import torchvision.transforms as standard_transforms
 
+import os
+# os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"]="1"
+# cuda1 = torch.device('cuda:1')
+
 def get_next_batch(gt_images, gt_labels, gt_boxes, iter, batch_size, shuffle=True, transform=None):
 
     start_point = iter * batch_size
@@ -60,7 +65,7 @@ def get_next_batch(gt_images, gt_labels, gt_boxes, iter, batch_size, shuffle=Tru
     return images, labels, boxes
 
 def test_get_data():
-    gt_images, gt_labels, gt_boxes = get_training_data_left(image_path = 'images_left_padded/', max_w = 1280, max_h = 240)
+    gt_images, gt_labels, gt_boxes = get_training_data_left(image_path = 'images_left_padded/', annotation_file='tag.left.padded.csv', max_w = 1280, max_h = 240)
     images, labels, boxes = get_next_batch(gt_images, gt_labels, gt_boxes, 0, 10)
     for image, label, box in zip(images, labels, boxes):
         m,b = box
@@ -91,7 +96,7 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
     print('Learning rate: ', lr)
     lossfn = LossFn()
     # net = Network(is_train=True, use_cuda=use_cuda)
-    net = EncoderFichaNet(is_train=True, use_cuda=use_cuda)
+    net = EncoderFichaNet(is_train=True, use_cuda=use_cuda)#.to(device=cuda1)
     print('Summary')
 
     # summary(net, (3, 640, 120))
@@ -103,7 +108,7 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
     net.encoder = pretrained_model.encoder
 
     freeze_layers = [
-        net.encoder
+        # net.encoder
     ]
 
     # freeze_layers.extend(net.layers)
@@ -116,6 +121,7 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
 
     print('Setting optimizer')
 
+    # optimizer = torch.optim.Adam(net.parameters(), lr=lr)
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, net.parameters()), lr=lr)
 
     # transforms = standard_transforms.Compose([
@@ -123,7 +129,7 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
     #     standard_transforms.ToTensor()
     # ])
 
-    gt_images, gt_labels, gt_boxes = get_training_data_left(image_path = 'images_left_padded/', max_w = 1280, max_h = 240)
+    gt_images, gt_labels, gt_boxes = get_training_data_left(image_path = 'images_left_padded/', annotation_file='tag.left.padded.csv', max_w = 1280, max_h = 240)
     train_size = len(gt_images)
     n_iterations = train_size // batch_size
     if n_iterations * batch_size < train_size:
@@ -151,9 +157,9 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
             gt_box = Variable(torch.from_numpy(boxes).float())
 
             if use_cuda:
-                im_tensor = im_tensor.cuda()
-                gt_label = gt_label.cuda()
-                gt_box = gt_box.cuda()
+                im_tensor = im_tensor.cuda()#.to(device=cuda1)
+                gt_label = gt_label.cuda()#.to(device=cuda1)
+                gt_box = gt_box.cuda()#.to(device=cuda1)
 
             cls_pred, box_pred = net(im_tensor)
 
@@ -187,10 +193,15 @@ def train(epochs = 5000, batch_size=16, lr=0.00001, use_cuda=True):
 
         if epoch % 50 == 0:
             print("SAVING MODEL")
-            torch.save(net, './models/1120x210_enet_mtcnn_pad/model_epoch_{}.ckpt'.format(epoch))
+            torch.save(net, './models/1120x210_enet_mtcnn_pad_nofreeze/model_epoch_{}.ckpt'.format(epoch))
             print("MODEL SAVED CORRECTLY")
     print("FINISH")
 
 if __name__ == '__main__':
-    train()
+    os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+    print("#devices: ", torch.cuda.device_count())
+    with torch.cuda.device(0):
+        print('current device: ', torch.cuda.current_device())
+        train()
+    # train(batch_size=64)
     # test_get_data()

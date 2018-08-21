@@ -22,7 +22,7 @@ def main():
     ]
     for filename in files:
         input_path = os.path.join('video', filename)
-        output_path = os.path.join('output', filename.split('.')[0] + "_not_freeze_650.mp4")
+        output_path = os.path.join('output', filename.split('.')[0] + "_freeze.mp4")
 
         video_reader = cv2.VideoCapture(input_path)
         nb_frames = int(video_reader.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -30,7 +30,7 @@ def main():
         frame_w = int(video_reader.get(cv2.CAP_PROP_FRAME_WIDTH))
         video_writer = cv2.VideoWriter(output_path,cv2.VideoWriter_fourcc(*'MPEG'),20.0,(frame_w, frame_h))
 
-        net = torch.load('./models/1120x210_enet_mtcnn_pad_nofreeze/model_epoch_650.ckpt')
+        net = torch.load('./models/1120x210_enet_mtcnn_pad/model_epoch_300.ckpt')
 
         nx = 0
         ny = 240

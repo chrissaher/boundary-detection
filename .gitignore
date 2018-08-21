@@ -1,9 +1,11 @@
 # trained models and checkpoints
 pretrained/
 models/
+output/
 
 # data
 /images_left_padded
+/images_complete
 tag*
 /video
 
